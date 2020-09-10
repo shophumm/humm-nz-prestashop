@@ -52,7 +52,7 @@ class HummprestashopConfirmationModuleFrontController extends ModuleFrontControl
         }
 
         $isValid = HummCommon::isValidSignature($query, Configuration::get('HUMM_API_KEY'));
-        Logger::logContent(sprintf("End Transaction for Return Query%s Method %s", json_encode($query),$_SERVER['REQUEST_METHOD']));
+        Logger::logContent(sprintf("End Transaction for Return Query%s Method %s", json_encode($query), $_SERVER['REQUEST_METHOD']));
 
         if (!$isValid) {
             \HummClasses\Helper\Logger::logContent(sprintf("Signature error "));
@@ -60,7 +60,6 @@ class HummprestashopConfirmationModuleFrontController extends ModuleFrontControl
             $link = $this->context->link->getPageLink('order', true, null, "step=3");
             $this->context->smarty->assign('checkout_link', $link);
             $this->context->smarty->assign('errors', $this->errors);
-
             return $this->setTemplate('module:hummprestashop/views/templates/front/error.tpl');
         }
 
@@ -71,6 +70,8 @@ class HummprestashopConfirmationModuleFrontController extends ModuleFrontControl
         $cart = new Cart((int)$cart_id);
         $customer = new Customer((int)$cart->id_customer);
         $payment_status = Configuration::get('PS_OS_PAYMENT'); // Default value for a payment that succeed.
+
+        $payment_status_cancel = Configuration::get('PS_OS_CANCELED');
 
         //We are not using a second script to be used by the Payment Gateway to issue the async callback
         //to notify us to validate the order remotely (i.e. validation.php). We are using this 
@@ -92,6 +93,18 @@ class HummprestashopConfirmationModuleFrontController extends ModuleFrontControl
                 $this->redirectToOrderConfirmationPage($cart_id, $order_id, $secure_key);
                 return true;
             }
+
+            if ($order && $order->getCurrentState() == $payment_status_cancel) {
+                //if the order had already been validated by the async callback from the Payment Gateway
+                //and the payment was successful...
+                //Because only successful transactions generate orders
+                $this->errors[] = $this->module->l('Payment has been declined by provider humm');
+                $link = $this->context->link->getPageLink('order', true, null, "step=3");
+                $this->context->smarty->assign('checkout_link', $link);
+                $this->context->smarty->assign('errors', $this->errors);
+                $this->setTemplate('module:hummprestashop/views/templates/front/error.tpl');
+                return false;
+            }
         }
 
         /**
@@ -99,54 +112,62 @@ class HummprestashopConfirmationModuleFrontController extends ModuleFrontControl
          */
         $module_name = $this->module->displayName;
         $currency_id = (int)Context::getContext()->currency->id;
-        $returnValue = false;
-        if ($isValid && Tools::getValue('x_result') == 'completed') {
-            $message = "Humm authorisation success. Transaction #$transactionId";
-            $this->module->validateOrder($cart_id, $payment_status, $cart->getOrderTotal(), $module_name, $message, array(), $currency_id, false, $secure_key);
 
+        $returnValue = false;
+        $response = Tools::getValue('x_result');
+        Logger::logContent(sprintf("[ Response:%s] %s", $response, $payment_status_cancel ));
+        if ($response == 'completed' || $response == 'failed') {
+            $messageComplete = "Humm authorisation success . Transaction #$transactionId";
+            if ($response == 'completed') {
+                $this->module->validateOrder($cart_id, $payment_status, $cart->getOrderTotal(), $module_name, $messageComplete, array(), $currency_id, false, $secure_key);
+            } else {
+                $messageFailed = "Humm authorisation falied . Transaction #$transactionId";
+                $this->module->validateOrder($cart_id, $payment_status_cancel, $cart->getOrderTotal(), $module_name, $messageFailed, array(), $currency_id, false, $secure_key);
+            }
             /**
              * If the order has been validated we try to retrieve it
              */
             $order_id = Order::getIdByCartId((int)$cart->id);
 
-            if ($order_id && ($secure_key == $customer->secure_key)) {
-                /**
-                 * The order has been placed so we redirect the customer on the confirmation page.
-                 */
+            if ($response == 'completed') {
+                if ($order_id && ($secure_key == $customer->secure_key)) {
+                    /**
+                     * The order has been placed so we redirect the customer on the confirmation page.
+                     */
 
-                Logger::logContent(sprintf("end transaction [ OrderId:%s] [ Secure Key:%s]", $order_id, $secure_key));
-                $this->redirectToOrderConfirmationPage($cart_id, $order_id, $secure_key);
-                  $returnValue = true;
+                    Logger::logContent(sprintf("end transaction [ OrderId:%s] [ Secure Key:%s]", $order_id, $secure_key));
+                    $this->redirectToOrderConfirmationPage($cart_id, $order_id, $secure_key);
+                    $returnValue = true;
+                } else {
+                    /**
+                     * An error occured and is shown on a new page.
+                     */
+                    $this->errors[] = $this->module->l('An error occured. Please contact the merchant to have more information.');
+                    Logger::logContent(sprintf("end transaction in the errors %s %s %s %s"), $order_id, $secure_key, $customer->secure_key, json_encode($this->errors));
+                    $this->setTemplate('module:hummprestashop/views/templates/front/error.tpl');
+                    $returnValue = false;
+                }
             } else {
                 /**
                  * An error occured and is shown on a new page.
                  */
-                $this->errors[] = $this->module->l('An error occured. Please contact the merchant to have more information.');
-                Logger::logContent(sprintf("end transaction in the errors %s %s %s %s"), $order_id, $secure_key, $customer->secure_key, json_encode($this->errors));
+                $this->errors[] = $this->module->l('Payment has been declined by provider humm');
+                $link = $this->context->link->getPageLink('order', true, null, "step=3");
+                $this->context->smarty->assign('checkout_link', $link);
+                $this->context->smarty->assign('errors', $this->errors);
                 $this->setTemplate('module:hummprestashop/views/templates/front/error.tpl');
-                   $returnValue = false;
+                $returnValue = false;
             }
-        } else {
-            /**
-             * An error occured and is shown on a new page.
-             */
-            $this->errors[] = $this->module->l('Payment has been declined by provider humm');
-            $link = $this->context->link->getPageLink('order', true, null, "step=3");
-            $this->context->smarty->assign('checkout_link', $link);
-            $this->context->smarty->assign('errors', $this->errors);
-            $this->setTemplate('module:hummprestashop/views/templates/front/error.tpl');
-            $returnValue = false;
-        }
-        if ($this->errors){
-            Logger::logContent(sprintf("some errors %s",json_encode($this->errors)));
-        }
+            if ($this->errors) {
+                Logger::logContent(sprintf("some errors %s", json_encode($this->errors)));
+            }
 
-        return $returnValue;
+            return $returnValue;
+         }
+        }
+        private function redirectToOrderConfirmationPage($cart_id, $order_id, $secure_key)
+        {
+            $module_id = $this->module->id;
+            Tools::redirect('index.php?controller=order-confirmation&id_cart=' . $cart_id . '&id_module=' . $module_id . '&id_order=' . $order_id . '&key=' . $secure_key);
+        }
     }
-
-    private function redirectToOrderConfirmationPage($cart_id, $order_id, $secure_key)
-    {
-        $module_id = $this->module->id;
-        Tools::redirect('index.php?controller=order-confirmation&id_cart=' . $cart_id . '&id_module=' . $module_id . '&id_order=' . $order_id . '&key=' . $secure_key);
-    }
-}
