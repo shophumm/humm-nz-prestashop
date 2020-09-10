@@ -102,8 +102,8 @@ class HummprestashopConfirmationModuleFrontController extends ModuleFrontControl
                 $link = $this->context->link->getPageLink('order', true, null, "step=3");
                 $this->context->smarty->assign('checkout_link', $link);
                 $this->context->smarty->assign('errors', $this->errors);
-                $this->setTemplate('module:hummprestashop/views/templates/front/error.tpl');
-                return false;
+                return $this->setTemplate('module:hummprestashop/views/templates/front/error.tpl');
+
             }
         }
 
@@ -121,8 +121,10 @@ class HummprestashopConfirmationModuleFrontController extends ModuleFrontControl
             if ($response == 'completed') {
                 $this->module->validateOrder($cart_id, $payment_status, $cart->getOrderTotal(), $module_name, $messageComplete, array(), $currency_id, false, $secure_key);
             } else {
-                $messageFailed = "Humm authorisation falied . Transaction #$transactionId";
-                $this->module->validateOrder($cart_id, $payment_status_cancel, $cart->getOrderTotal(), $module_name, $messageFailed, array(), $currency_id, false, $secure_key);
+                if ($_SERVER['REQUEST_METHOD'] != 'GET') {
+                    $messageFailed = "Humm authorisation falied . Transaction #$transactionId";
+                    $this->module->validateOrder($cart_id, $payment_status_cancel, $cart->getOrderTotal(), $module_name, $messageFailed, array(), $currency_id, false, $secure_key);
+                }
             }
             /**
              * If the order has been validated we try to retrieve it
