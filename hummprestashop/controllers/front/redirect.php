@@ -145,15 +145,17 @@ class HummprestashopRedirectModuleFrontController extends ModuleFrontController
 
         $countryCode = Configuration::get('HUMM_COUNTRY');
 
-        if ($countryCode == 'NZ') {
-            if ($forceHumm) {
-                return 'NZ_Humm';
-            } else {
-                return 'NZ_Oxipay';
-            }
-        } else {
-            return 'AU';
-        }
+        return 'NZ_Humm';
+
+//        if ($countryCode == 'NZ') {
+//            if ($forceHumm) {
+//                return 'NZ_Humm';
+//            } else {
+//                return 'NZ_Oxipay';
+//            }
+//        } else {
+//            return 'AU';
+//        }
     }
 
     /**
