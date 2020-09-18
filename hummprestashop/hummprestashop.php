@@ -774,7 +774,7 @@ class Hummprestashop extends PaymentModule
 
     public function hookDisplayProductPriceBlock($param)
     {
-        if (Configuration::get('HUMM_DISPLAY_WIDGET_PRODUCTPAGE') && $this->context->controller->php_self == 'product' && $param['type'] == "weight") {
+        if (Configuration::get('HUMM_DISPLAY_WIDGET_PRODUCTPAGE') && $this->context->controller->php_self == 'product' && $param['type'] == "weight" && isset( $param['hook_origin'])){
             $this->smarty->assign(array(
                 'productPrice' => $param['product']['price_amount']
             ));
